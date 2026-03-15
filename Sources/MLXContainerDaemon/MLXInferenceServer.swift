@@ -1,7 +1,6 @@
 import Foundation
 import GRPCCore
 import GRPCNIOTransportHTTP2
-import GRPCProtobuf
 import Logging
 import MLXContainerConfig
 import MLXContainerProtocol
@@ -48,7 +47,7 @@ public final class MLXInferenceServer: Sendable {
 
         let server = GRPCServer(
             transport: .http2NIOPosix(
-                address: .vsock(contextID: .any, port: .init(config.vsockPort)),
+                address: .vsock(contextID: .any, port: .init(rawValue: config.vsockPort)),
                 transportSecurity: .plaintext
             ),
             services: [serviceImpl]
@@ -63,111 +62,119 @@ public final class MLXInferenceServer: Sendable {
 struct MLXContainerServiceImpl: MLXContainerServiceProtocol {
     let server: MLXInferenceServer
 
-    func loadModel(request: ServerRequest<MLXContainer_LoadModelRequest>) async throws -> ServerResponse<MLXContainer_LoadModelResponse> {
-        let req = request.message
-        server.logger.info("LoadModel: \(req.modelID)")
+    func loadModel(
+        request: MLXContainer_LoadModelRequest,
+        context: ServerContext
+    ) async throws -> MLXContainer_LoadModelResponse {
+        server.logger.info("LoadModel: \(request.modelID)")
 
         var response = MLXContainer_LoadModelResponse()
         let startTime = Date()
 
         do {
-            try await server.modelManager.loadModel(id: req.modelID)
+            try await server.modelManager.loadModel(id: request.modelID)
             response.success = true
-            response.modelID = req.modelID
+            response.modelID = request.modelID
             response.loadTimeSeconds = Date().timeIntervalSince(startTime)
-            server.logger.info("Model loaded: \(req.modelID) in \(String(format: "%.2f", response.loadTimeSeconds))s")
+            server.logger.info("Model loaded: \(request.modelID) in \(String(format: "%.2f", response.loadTimeSeconds))s")
         } catch {
             response.success = false
             response.error = error.localizedDescription
             server.logger.error("Failed to load model: \(error)")
         }
 
-        return ServerResponse(message: response)
+        return response
     }
 
-    func unloadModel(request: ServerRequest<MLXContainer_UnloadModelRequest>) async throws -> ServerResponse<MLXContainer_UnloadModelResponse> {
-        let req = request.message
-        server.logger.info("UnloadModel: \(req.modelID)")
+    func unloadModel(
+        request: MLXContainer_UnloadModelRequest,
+        context: ServerContext
+    ) async throws -> MLXContainer_UnloadModelResponse {
+        server.logger.info("UnloadModel: \(request.modelID)")
 
         var response = MLXContainer_UnloadModelResponse()
         do {
-            try await server.modelManager.unloadModel(id: req.modelID)
+            try await server.modelManager.unloadModel(id: request.modelID)
             response.success = true
         } catch {
             response.success = false
             response.error = error.localizedDescription
         }
 
-        return ServerResponse(message: response)
+        return response
     }
 
-    func listModels(request: ServerRequest<MLXContainer_ListModelsRequest>) async throws -> ServerResponse<MLXContainer_ListModelsResponse> {
+    func listModels(
+        request: MLXContainer_ListModelsRequest,
+        context: ServerContext
+    ) async throws -> MLXContainer_ListModelsResponse {
         let models = await server.modelManager.listModels()
         var response = MLXContainer_ListModelsResponse()
         response.models = models.map { model in
-            var info = MLXContainer_ModelInfo()
-            info.modelID = model.id
-            info.isLoaded = model.isLoaded
-            info.modelType = model.modelType
-            return info
+            MLXContainer_ModelInfo(
+                modelID: model.id,
+                isLoaded: model.isLoaded,
+                modelType: model.modelType
+            )
         }
-        return ServerResponse(message: response)
+        return response
     }
 
-    func generate(request: ServerRequest<MLXContainer_GenerateRequest>) async throws -> ServerResponse.Stream<MLXContainer_GenerateResponse> {
-        let req = request.message
-        server.logger.info("Generate: model=\(req.modelID), prompt_len=\(req.prompt.count)")
+    func generate(
+        request: MLXContainer_GenerateRequest,
+        context: ServerContext,
+        responseWriter: RPCWriter<MLXContainer_GenerateResponse>
+    ) async throws {
+        server.logger.info("Generate: model=\(request.modelID), prompt_len=\(request.prompt.count)")
 
-        return ServerResponse.Stream(of: MLXContainer_GenerateResponse.self) { writer in
-            do {
-                try await server.inferenceEngine.generate(
-                    modelID: req.modelID,
-                    prompt: req.prompt,
-                    messages: req.messages,
-                    parameters: req.parameters
-                ) { token in
-                    let response = MLXContainer_GenerateResponse(token: token)
-                    try await writer.write(response)
-                } onComplete: { complete in
-                    let response = MLXContainer_GenerateResponse(complete: complete)
-                    try await writer.write(response)
-                }
-            } catch {
-                server.logger.error("Generate error: \(error)")
-                throw error
-            }
+        try await server.inferenceEngine.generate(
+            modelID: request.modelID,
+            prompt: request.prompt,
+            messages: request.messages,
+            parameters: request.parameters
+        ) { token in
+            try await responseWriter.write(MLXContainer_GenerateResponse(token: token))
+        } onComplete: { complete in
+            try await responseWriter.write(MLXContainer_GenerateResponse(complete: complete))
         }
     }
 
-    func embed(request: ServerRequest<MLXContainer_EmbedRequest>) async throws -> ServerResponse<MLXContainer_EmbedResponse> {
-        var response = MLXContainer_EmbedResponse()
-        response.error = "Embeddings not yet implemented"
-        return ServerResponse(message: response)
+    func embed(
+        request: MLXContainer_EmbedRequest,
+        context: ServerContext
+    ) async throws -> MLXContainer_EmbedResponse {
+        return MLXContainer_EmbedResponse(error: "Embeddings not yet implemented")
     }
 
-    func getGPUStatus(request: ServerRequest<MLXContainer_GetGPUStatusRequest>) async throws -> ServerResponse<MLXContainer_GetGPUStatusResponse> {
+    func getGPUStatus(
+        request: MLXContainer_GetGPUStatusRequest,
+        context: ServerContext
+    ) async throws -> MLXContainer_GetGPUStatusResponse {
         let models = await server.modelManager.listModels()
 
-        var response = MLXContainer_GetGPUStatusResponse()
-        response.deviceName = server.gpu.name
-        response.totalMemoryBytes = server.gpu.unifiedMemoryBytes
-        response.gpuFamily = server.gpu.gpuFamily
-        response.loadedModelsCount = Int32(models.filter(\.isLoaded).count)
-        response.loadedModels = models.map { m in
-            var info = MLXContainer_ModelInfo()
-            info.modelID = m.id
-            info.isLoaded = m.isLoaded
-            info.modelType = m.modelType
-            return info
-        }
-        return ServerResponse(message: response)
+        return MLXContainer_GetGPUStatusResponse(
+            deviceName: server.gpu.name,
+            totalMemoryBytes: server.gpu.unifiedMemoryBytes,
+            gpuFamily: server.gpu.gpuFamily,
+            loadedModelsCount: Int32(models.filter(\.isLoaded).count),
+            loadedModels: models.map { m in
+                MLXContainer_ModelInfo(
+                    modelID: m.id,
+                    isLoaded: m.isLoaded,
+                    modelType: m.modelType
+                )
+            }
+        )
     }
 
-    func ping(request: ServerRequest<MLXContainer_PingRequest>) async throws -> ServerResponse<MLXContainer_PingResponse> {
-        var response = MLXContainer_PingResponse()
-        response.status = "ok"
-        response.version = "0.1.0"
-        response.uptimeSeconds = Date().timeIntervalSince(server.startTime)
-        return ServerResponse(message: response)
+    func ping(
+        request: MLXContainer_PingRequest,
+        context: ServerContext
+    ) async throws -> MLXContainer_PingResponse {
+        return MLXContainer_PingResponse(
+            status: "ok",
+            version: "0.1.0",
+            uptimeSeconds: Date().timeIntervalSince(server.startTime)
+        )
     }
 }

@@ -14,14 +14,14 @@ let package = Package(
         .library(name: "MLXContainerRuntime", targets: ["MLXContainerRuntime"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),
-        .package(url: "https://github.com/apple/swift-log.git", from: "1.6.0"),
+        .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.7.0"),
+        .package(url: "https://github.com/apple/swift-log.git", from: "1.9.0"),
         .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.28.0"),
-        .package(url: "https://github.com/grpc/grpc-swift-2.git", exact: "2.1.0"),
-        .package(url: "https://github.com/grpc/grpc-swift-nio-transport.git", exact: "2.1.0"),
-        .package(url: "https://github.com/grpc/grpc-swift-protobuf.git", exact: "2.1.0"),
-        .package(url: "https://github.com/ml-explore/mlx-swift.git", from: "0.21.0"),
-        .package(url: "https://github.com/ml-explore/mlx-swift-lm.git", from: "0.1.0"),
+        .package(url: "https://github.com/grpc/grpc-swift-2.git", from: "2.3.0"),
+        .package(url: "https://github.com/grpc/grpc-swift-nio-transport.git", from: "2.4.0"),
+        .package(url: "https://github.com/grpc/grpc-swift-protobuf.git", from: "2.2.0"),
+        .package(url: "https://github.com/ml-explore/mlx-swift.git", .upToNextMinor(from: "0.30.6")),
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm.git", .upToNextMinor(from: "2.30.6")),
     ],
     targets: [
         // MARK: - Device Discovery
@@ -41,11 +41,11 @@ let package = Package(
             ]
         ),
 
-        // MARK: - Protocol (gRPC stubs)
+        // MARK: - Protocol (gRPC service + JSON-serialized messages)
         .target(
             name: "MLXContainerProtocol",
             dependencies: [
-                .product(name: "GRPCProtobuf", package: "grpc-swift-protobuf"),
+                .product(name: "GRPCCore", package: "grpc-swift-2"),
             ]
         ),
 
@@ -60,7 +60,6 @@ let package = Package(
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "GRPCCore", package: "grpc-swift-2"),
                 .product(name: "GRPCNIOTransportHTTP2", package: "grpc-swift-nio-transport"),
-                .product(name: "GRPCProtobuf", package: "grpc-swift-protobuf"),
                 .product(name: "MLX", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
                 .product(name: "MLXRandom", package: "mlx-swift"),

@@ -62,39 +62,36 @@ public actor InferenceEngine {
 
         let userInput = UserInput(chat: chatMessages)
 
-        // Prepare input and generate
+        // Prepare input
         let input = try await container.prepare(input: userInput)
 
-        var fullText = ""
-        var promptTokens: Int32 = 0
+        // Generate with streaming
         let startTime = Date()
+        var fullText = ""
 
-        try await container.update { context in
-            let genStartTime = Date()
+        let stream = try await container.generate(
+            input: input,
+            parameters: generateParams
+        )
 
-            for await item in MLXLMCommon.generate(
-                input: input,
-                parameters: generateParams,
-                context: context
-            ) {
-                switch item {
-                case .chunk(let text):
-                    fullText += text
-                    try await onToken(text)
+        for await item in stream {
+            switch item {
+            case .chunk(let text):
+                fullText += text
+                try await onToken(text)
 
-                case .info(let info):
-                    let genTime = Date().timeIntervalSince(genStartTime)
-                    var complete = MLXContainer_GenerateComplete()
-                    complete.fullText = fullText
-                    complete.promptTimeSeconds = info.promptTime
-                    complete.generationTimeSeconds = genTime
-                    complete.tokensPerSecond = info.tokensPerSecond
-                    complete.completionTokens = Int32(fullText.count) // approximate
-                    try await onComplete(complete)
+            case .info(let info):
+                let genTime = Date().timeIntervalSince(startTime)
+                let complete = MLXContainer_GenerateComplete(
+                    fullText: fullText,
+                    promptTimeSeconds: info.promptTime,
+                    generationTimeSeconds: genTime,
+                    tokensPerSecond: info.tokensPerSecond
+                )
+                try await onComplete(complete)
 
-                case .toolCall:
-                    break
-                }
+            case .toolCall:
+                break
             }
         }
 
