@@ -53,13 +53,16 @@ public actor ModelManager {
             }
         }
 
-        logger.info("Loading model: \(modelID)")
+        logger.info("Loading model: \(modelID) (downloading if needed...)")
 
         let modelConfig = ModelConfiguration(id: modelID)
         let container = try await LLMModelFactory.shared.loadContainer(
             configuration: modelConfig
         ) { progress in
-            self.logger.debug("Download progress: \(Int(progress.fractionCompleted * 100))%")
+            if progress.fractionCompleted < 1.0 {
+                print("  Downloading: \(Int(progress.fractionCompleted * 100))%", terminator: "\r")
+                fflush(stdout)
+            }
         }
 
         loadedModels[modelID] = LoadedModel(

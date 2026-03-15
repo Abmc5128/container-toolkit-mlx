@@ -23,6 +23,12 @@ struct DaemonMain: AsyncParsableCommand {
     @Option(name: .long, help: "Model to pre-load on startup")
     var preloadModel: String?
 
+    @Flag(name: .long, help: "Use TCP instead of vsock (for local development)")
+    var tcp: Bool = false
+
+    @Option(name: .long, help: "TCP port when using --tcp (default: 50051)")
+    var tcpPort: Int = 50051
+
     func run() async throws {
         LoggingSystem.bootstrap { label in
             var handler = StreamLogHandler.standardError(label: label)
@@ -59,7 +65,12 @@ struct DaemonMain: AsyncParsableCommand {
             try await server.modelManager.loadModel(id: modelID)
         }
 
-        logger.info("Starting gRPC server on vsock port \(toolkitConfig.vsockPort)")
-        try await server.serve()
+        if tcp {
+            logger.info("Starting gRPC server on TCP localhost:\(tcpPort)")
+            try await server.serveTCP(port: tcpPort)
+        } else {
+            logger.info("Starting gRPC server on vsock port \(toolkitConfig.vsockPort)")
+            try await server.serve()
+        }
     }
 }

@@ -25,3 +25,6 @@ nvidia-container-toolkit/
 
 # Claude settings
 .claude/settings.json
+.xcode-build/
+client/.venv/
+tools/__pycache__/

@@ -56,6 +56,22 @@ public final class MLXInferenceServer: Sendable {
         logger.info("MLX Container Daemon v0.1.0 listening on vsock port \(config.vsockPort)")
         try await server.serve()
     }
+
+    /// Start the gRPC server on TCP (for local development/testing).
+    public func serveTCP(port: Int) async throws {
+        let serviceImpl = MLXContainerServiceImpl(server: self)
+
+        let server = GRPCServer(
+            transport: .http2NIOPosix(
+                address: .ipv4(host: "127.0.0.1", port: port),
+                transportSecurity: .plaintext
+            ),
+            services: [serviceImpl]
+        )
+
+        logger.info("MLX Container Daemon v0.1.0 listening on TCP 127.0.0.1:\(port)")
+        try await server.serve()
+    }
 }
 
 /// gRPC service implementation that delegates to the server components.
