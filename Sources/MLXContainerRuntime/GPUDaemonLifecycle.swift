@@ -9,6 +9,7 @@ public actor GPUDaemonLifecycle {
     let logger: Logger
 
     private var daemonProcess: Process?
+    private var logHandles: [FileHandle] = []
     private var activeContainers: Set<String> = []
 
     public init(config: ToolkitConfiguration, logger: Logger) {
@@ -94,6 +95,7 @@ public actor GPUDaemonLifecycle {
 
         try process.run()
         daemonProcess = process
+        logHandles = [stdoutHandle, stderrHandle]
 
         logger.info("MLX Container Daemon started (PID: \(process.processIdentifier))")
     }
@@ -101,6 +103,11 @@ public actor GPUDaemonLifecycle {
     private func stopDaemon() {
         guard let process = daemonProcess, process.isRunning else { return }
         process.terminate()
+        // Close log file handles to flush pending writes and release file descriptors.
+        for handle in logHandles {
+            try? handle.close()
+        }
+        logHandles = []
         daemonProcess = nil
         logger.info("MLX Container Daemon stopped")
     }

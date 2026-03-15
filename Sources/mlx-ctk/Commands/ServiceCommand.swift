@@ -172,16 +172,11 @@ struct ServiceCommand: AsyncParsableCommand {
         }
 
         private func checkTCPPort(host: String, port: Int) async -> Bool {
-            await withCheckedContinuation { continuation in
-                let task = Task {
-                    do {
-                        let (didConnect, _) = try await connectTCP(host: host, port: port, timeoutSeconds: 2)
-                        continuation.resume(returning: didConnect)
-                    } catch {
-                        continuation.resume(returning: false)
-                    }
-                }
-                _ = task
+            do {
+                let (didConnect, _) = try await connectTCP(host: host, port: port, timeoutSeconds: 2)
+                return didConnect
+            } catch {
+                return false
             }
         }
 
