@@ -5,32 +5,56 @@ build-backend = "hatchling.build"
 [project]
 name = "mlx-container"
 version = "0.1.0"
-description = "Python client for MLX Container Toolkit — GPU-accelerated inference in Linux containers on Apple Silicon"
+description = "Python client for the MLX Container Toolkit — GPU-accelerated inference in Linux containers on Apple Silicon via vsock"
 readme = "README.md"
-license = "MIT"
+license = { text = "MIT" }
 requires-python = ">=3.10"
 authors = [
     { name = "AIFLOW LABS", email = "ilessio@aiflowlabs.io" },
 ]
+keywords = ["mlx", "apple-silicon", "gpu", "inference", "container", "vsock", "grpc"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: POSIX :: Linux",
 ]
+
+# Runtime: only grpcio is required.  protobuf is NOT needed because we use
+# our own JSON-over-gRPC serialisation to match the Swift server.
 dependencies = [
     "grpcio>=1.60.0",
-    "protobuf>=4.25.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "pytest-mock>=3.12",
     "ruff>=0.3.0",
+    "mypy>=1.8",
 ]
+
+[project.urls]
+Homepage = "https://github.com/RobotFlow-Labs/apple-container-mlx"
+"Bug Tracker" = "https://github.com/RobotFlow-Labs/apple-container-mlx/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["mlx_container"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = false
+ignore_missing_imports = true
