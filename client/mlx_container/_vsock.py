@@ -14,6 +14,8 @@ from typing import Optional
 # vsock constants
 AF_VSOCK = 40  # Linux AF_VSOCK address family
 VMADDR_CID_HOST = 2  # CID for the hypervisor host
+# NOTE: DEFAULT_PORT must match ToolkitConfiguration.defaultVsockPort (Swift side).
+# If the Swift default changes, update this value accordingly.
 DEFAULT_PORT = 2048
 
 

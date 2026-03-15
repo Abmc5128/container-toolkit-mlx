@@ -111,6 +111,16 @@ public actor ModelManager {
         return model.container
     }
 
+    /// Unload all loaded models. Called during graceful shutdown.
+    public func unloadAll() async {
+        let ids = Array(loadedModels.keys)
+        for id in ids {
+            await memoryAllocator.release(containerID: id)
+            loadedModels.removeValue(forKey: id)
+            logger.info("Model unloaded (shutdown): \(id)")
+        }
+    }
+
     /// List all tracked models.
     public func listModels() -> [ModelEntry] {
         loadedModels.map { (id, model) in

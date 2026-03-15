@@ -123,7 +123,7 @@ def _make_vsock_channel(cid: int, port: int) -> grpc.Channel:
         listener.close()
         raise _error[0]
 
-    return grpc.insecure_channel(f"127.0.0.1:{tcp_port}")
+    return grpc.insecure_channel(f"127.0.0.1:{tcp_port}"), listener
 
 
 # ---------------------------------------------------------------------------
@@ -161,6 +161,8 @@ class MLXContainerClient:
         self._vsock_port = vsock_port
         self._channel: Optional[grpc.Channel] = None
         self._stub: Optional[pb2_grpc.MLXContainerServiceStub] = None
+        # Listener socket kept open while a vsock proxy is active; closed in close().
+        self._vsock_listener: Optional[socket.socket] = None
 
     # ------------------------------------------------------------------
     # Connection lifecycle
@@ -175,7 +177,7 @@ class MLXContainerClient:
             parts = self._target.split(":")
             cid = int(parts[1])
             port = int(parts[2])
-            self._channel = _make_vsock_channel(cid, port)
+            self._channel, self._vsock_listener = _make_vsock_channel(cid, port)
         else:
             self._channel = grpc.insecure_channel(self._target)
 
@@ -188,11 +190,19 @@ class MLXContainerClient:
         return self._stub
 
     def close(self) -> None:
-        """Close the gRPC channel."""
+        """Close the gRPC channel and any vsock proxy listener."""
         if self._channel:
             self._channel.close()
             self._channel = None
             self._stub = None
+        # Closing the listener socket causes the proxy thread's accept() call to
+        # raise OSError, which breaks it out of the loop so the thread exits.
+        if self._vsock_listener is not None:
+            try:
+                self._vsock_listener.close()
+            except OSError:
+                pass
+            self._vsock_listener = None
 
     def __enter__(self) -> "MLXContainerClient":
         return self

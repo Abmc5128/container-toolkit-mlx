@@ -18,9 +18,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python3 -m venv /opt/mlx-container
 ENV PATH="/opt/mlx-container/bin:$PATH"
 
-# Install the mlx-container client package
+# Install the mlx-container client package.
+# Copy pyproject.toml first so the dependency-install layer is cached
+# independently of source changes (deps layer only rebuilds when pyproject.toml changes).
+COPY client/pyproject.toml /tmp/mlx-container-client/pyproject.toml
+RUN pip install --no-cache-dir /tmp/mlx-container-client/
 COPY client/ /tmp/mlx-container-client/
-RUN pip install --no-cache-dir /tmp/mlx-container-client/ && \
+RUN pip install --no-cache-dir --no-deps /tmp/mlx-container-client/ && \
     rm -rf /tmp/mlx-container-client/
 
 # Install common ML/AI dependencies (these run on CPU in the container,

@@ -1,4 +1,5 @@
 import Foundation
+import MLXContainerConfig
 
 /// GPU-related command-line flags for `container run --gpu`.
 /// Designed to integrate with Apple's container CLI flag system.
@@ -32,7 +33,7 @@ public struct GPUFlags: Sendable, Codable {
         gpuModel: String? = nil,
         gpuMaxTokens: Int = 2048,
         gpuModelManagement: Bool = true,
-        gpuPort: UInt32 = 2048
+        gpuPort: UInt32 = ToolkitConfiguration.defaultVsockPort
     ) {
         self.gpu = gpu
         self.gpuMemory = gpuMemory
@@ -67,7 +68,7 @@ public struct GPUFlags: Sendable, Codable {
 //     public var gpuModelManagement: Bool = true
 //
 //     @Option(name: .customLong("gpu-port"), help: "vsock port for GPU daemon")
-//     public var gpuPort: UInt32 = 2048
+//     public var gpuPort: UInt32 = ToolkitConfiguration.defaultVsockPort
 // }
 // ```
 //

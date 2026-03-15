@@ -65,12 +65,48 @@ struct DaemonMain: AsyncParsableCommand {
             try await server.modelManager.loadModel(id: modelID)
         }
 
+        // Set up graceful shutdown on SIGTERM / SIGINT.
+        // DispatchSource signal handlers must run on a serial queue; we use the
+        // main queue and capture a Task to cancel the serve work.
+        let serveTask: Task<Void, Error>
         if tcp {
             logger.info("Starting gRPC server on TCP localhost:\(tcpPort)")
-            try await server.serveTCP(port: tcpPort)
+            serveTask = Task { try await server.serveTCP(port: tcpPort) }
         } else {
             logger.info("Starting gRPC server on vsock port \(toolkitConfig.vsockPort)")
-            try await server.serve()
+            serveTask = Task { try await server.serve() }
         }
+
+        // Ignore default signal disposition so DispatchSource can intercept them.
+        signal(SIGTERM, SIG_IGN)
+        signal(SIGINT, SIG_IGN)
+
+        let termSource = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        let intSource  = DispatchSource.makeSignalSource(signal: SIGINT,  queue: .main)
+
+        let shutdownHandler: @Sendable () -> Void = {
+            logger.info("Shutting down...")
+            // Unload all models before cancelling the serve task so MLX
+            // releases GPU memory cleanly before the process exits.
+            Task {
+                await server.modelManager.unloadAll()
+                serveTask.cancel()
+            }
+        }
+
+        termSource.setEventHandler(handler: shutdownHandler)
+        intSource.setEventHandler(handler: shutdownHandler)
+        termSource.resume()
+        intSource.resume()
+
+        // Block until the serve task finishes (either naturally or after cancellation).
+        do {
+            try await serveTask.value
+        } catch is CancellationError {
+            logger.info("Daemon stopped gracefully")
+        }
+
+        termSource.cancel()
+        intSource.cancel()
     }
 }

@@ -15,9 +15,25 @@ private enum HookConstants {
         "/opt/homebrew/bin/mlx-container-daemon",
     ]
     static let vsockCID: UInt32 = 2
-    static let vsockPort: UInt32 = ToolkitConfiguration.defaultVsockPort
+    /// Default TCP health-check port (gRPC TCP mode). Not the vsock port.
+    static let defaultTCPPort: UInt32 = 50051
     static let daemonStartTimeoutSeconds: Double = 5.0
     static let healthCheckRetries = 3
+
+    /// Resolve the port to probe in priority order:
+    ///   1. Explicit CLI override (passed in)
+    ///   2. `MLX_DAEMON_PORT` env var
+    ///   3. Config file `vsockPort` when TCP mode is detected (port != defaultVsockPort)
+    ///   4. Hard default: 50051 (TCP gRPC)
+    static func resolveProbePort(cliOverride: UInt32?) -> UInt32 {
+        if let p = cliOverride, p > 0 { return p }
+        if let envStr = ProcessInfo.processInfo.environment["MLX_DAEMON_PORT"],
+           let p = UInt32(envStr), p > 0 { return p }
+        let config = (try? ToolkitConfiguration.load()) ?? ToolkitConfiguration()
+        // If the config port equals the vsock default it is likely a vsock-only deployment;
+        // we still probe via TCP on the gRPC default so the hook works without vsock kernel support.
+        return config.vsockPort == ToolkitConfiguration.defaultVsockPort ? defaultTCPPort : config.vsockPort
+    }
 }
 
 // MARK: - Entry Point
@@ -44,9 +60,15 @@ struct StartDaemon: AsyncParsableCommand {
     @Flag(name: .long, help: "Verbose output")
     var verbose = false
 
+    @Option(name: .long, help: "TCP port to probe for daemon health (overrides config / MLX_DAEMON_PORT env var)")
+    var port: UInt32?
+
     func run() async throws {
         var logger = Logger(label: "com.aiflowlabs.mlx-cdi-hook.start-daemon")
         logger.logLevel = verbose ? .debug : .info
+
+        let probePort = HookConstants.resolveProbePort(cliOverride: port)
+        logger.debug("Using probe port \(probePort)")
 
         let pidPath = NSString(string: HookConstants.pidFilePath).expandingTildeInPath
 
@@ -55,7 +77,7 @@ struct StartDaemon: AsyncParsableCommand {
             if isProcessAlive(pid: pid) {
                 logger.info("Daemon already running (PID \(pid))")
                 // Still verify it is reachable
-                if await verifyDaemonResponding(logger: logger) {
+                if await verifyDaemonResponding(port: probePort, logger: logger) {
                     logger.info("Daemon health check passed")
                     return
                 }
@@ -111,7 +133,7 @@ struct StartDaemon: AsyncParsableCommand {
         let deadline = Date().addingTimeInterval(HookConstants.daemonStartTimeoutSeconds)
         var ready = false
         while Date() < deadline {
-            if await verifyDaemonResponding(logger: logger) {
+            if await verifyDaemonResponding(port: probePort, logger: logger) {
                 ready = true
                 break
             }
@@ -137,9 +159,15 @@ struct HealthCheck: AsyncParsableCommand {
     @Flag(name: .long, help: "Verbose output")
     var verbose = false
 
+    @Option(name: .long, help: "TCP port to probe for daemon health (overrides config / MLX_DAEMON_PORT env var)")
+    var port: UInt32?
+
     func run() async throws {
         var logger = Logger(label: "com.aiflowlabs.mlx-cdi-hook.health-check")
         logger.logLevel = verbose ? .debug : .info
+
+        let probePort = HookConstants.resolveProbePort(cliOverride: port)
+        logger.debug("Using probe port \(probePort)")
 
         let pidPath = NSString(string: HookConstants.pidFilePath).expandingTildeInPath
 
@@ -159,7 +187,7 @@ struct HealthCheck: AsyncParsableCommand {
 
         var passed = false
         for attempt in 1...HookConstants.healthCheckRetries {
-            if await verifyDaemonResponding(logger: logger) {
+            if await verifyDaemonResponding(port: probePort, logger: logger) {
                 passed = true
                 break
             }
@@ -203,9 +231,8 @@ private func killProcess(pid: Int32) {
 /// Try to connect to the daemon on localhost TCP (fallback from vsock for probe).
 /// A real vsock ping would require kernel extensions unavailable to user binaries,
 /// so we probe the gRPC TCP port that the daemon also listens on.
-private func verifyDaemonResponding(logger: Logger) async -> Bool {
-    let port = HookConstants.vsockPort
-    guard let nwPort = NWEndpoint.Port(rawValue: UInt16(port)) else { return false }
+private func verifyDaemonResponding(port: UInt32, logger: Logger) async -> Bool {
+    guard let nwPort = NWEndpoint.Port(rawValue: UInt16(clamping: port)) else { return false }
 
     let probe = TCPProbe(port: nwPort, logger: logger)
     return await probe.check()

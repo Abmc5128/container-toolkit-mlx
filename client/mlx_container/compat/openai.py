@@ -119,6 +119,10 @@ class ChatCompletion:
             stream=False,
         )
 
+        finish_reason = (
+            "length" if result.completion_tokens >= max_tokens else "stop"
+        )
+
         return ChatCompletionResponse(
             id=req_id,
             created=created,
@@ -127,7 +131,7 @@ class ChatCompletion:
                 Choice(
                     index=0,
                     message=Message(role="assistant", content=result.text),
-                    finish_reason="stop",
+                    finish_reason=finish_reason,
                 )
             ],
             usage=Usage(

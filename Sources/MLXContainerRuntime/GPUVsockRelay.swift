@@ -1,5 +1,6 @@
 import Foundation
 import Logging
+import MLXContainerConfig
 
 /// Sets up vsock relay between the container VM and the GPU daemon.
 /// Follows the pattern from apple-containerization's Vminitd+SocketRelay.swift.
@@ -7,8 +8,9 @@ import Logging
 /// The relay bridges the vsock port from the container's VM to the daemon
 /// listening on the host, allowing gRPC communication across the VM boundary.
 public struct GPUVsockRelay: Sendable {
-    /// Default vsock port for the GPU daemon
-    public static let defaultPort: UInt32 = 2048
+    /// Default vsock port for the GPU daemon.
+    /// Sourced from `ToolkitConfiguration.defaultVsockPort` to avoid duplication.
+    public static let defaultPort: UInt32 = ToolkitConfiguration.defaultVsockPort
 
     /// vsock CID for the host
     public static let hostCID: UInt32 = 2

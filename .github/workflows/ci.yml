@@ -11,6 +11,9 @@ jobs:
     name: Swift Build & Test
     runs-on: macos-15
 
+    env:
+      DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -48,3 +51,9 @@ jobs:
 
       - name: Format check
         run: ruff format --check client/
+
+      - name: Install client package with dev dependencies
+        run: cd client && pip install -e ".[dev]"
+
+      - name: Run Python tests
+        run: cd client && python -m pytest tests/ -v

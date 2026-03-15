@@ -52,6 +52,36 @@ struct ConfigCommand: AsyncParsableCommand {
         var defaultTemperature: Float?
 
         func run() async throws {
+            // Validate inputs before touching the stored config.
+            if let port = vsockPort {
+                guard port > 0, port < 65536 else {
+                    fputs("error: vsock-port must be between 1 and 65535 (got \(port))\n", stderr)
+                    throw ExitCode.failure
+                }
+            }
+            if let mem = maxGPUMemoryGB {
+                // UInt64 is always >= 0; guard kept for documentation clarity.
+                _ = mem  // no further constraint beyond the type
+            }
+            if let max = maxModels {
+                guard max > 0 else {
+                    fputs("error: max-models must be greater than 0 (got \(max))\n", stderr)
+                    throw ExitCode.failure
+                }
+            }
+            if let tokens = defaultMaxTokens {
+                guard tokens > 0, tokens <= 8192 else {
+                    fputs("error: default-max-tokens must be between 1 and 8192 (got \(tokens))\n", stderr)
+                    throw ExitCode.failure
+                }
+            }
+            if let temp = defaultTemperature {
+                guard temp >= 0, temp <= 2.0 else {
+                    fputs("error: default-temperature must be between 0.0 and 2.0 (got \(temp))\n", stderr)
+                    throw ExitCode.failure
+                }
+            }
+
             var config = try ToolkitConfiguration.load()
 
             if let port = vsockPort {

@@ -43,6 +43,11 @@ public actor GPUDaemonLifecycle {
         daemonProcess?.isRunning ?? false
     }
 
+    /// The OS process identifier of the running daemon, or `-1` if not running.
+    public var daemonPID: Int32 {
+        daemonProcess?.processIdentifier ?? -1
+    }
+
     /// Get the number of active GPU containers.
     public var activeContainerCount: Int {
         activeContainers.count

@@ -9,6 +9,13 @@ import MLXContainerProtocol
 
 /// Executes MLX inference using loaded models.
 public actor InferenceEngine {
+    /// Maximum prompt length in characters. Prompts exceeding this are rejected
+    /// before tokenisation to avoid runaway memory usage.
+    public static let maxPromptLength: Int = 32_768
+
+    /// Hard ceiling on tokens to generate per request.
+    public static let maxTokensCap: Int = 8_192
+
     let modelManager: ModelManager
     let defaultMaxTokens: Int
     let defaultTemperature: Float
@@ -35,9 +42,20 @@ public actor InferenceEngine {
         onToken: @Sendable (String) async throws -> Void,
         onComplete: @Sendable (MLXContainer_GenerateComplete) async throws -> Void
     ) async throws {
+        // Enforce prompt length limit before doing any work.
+        let effectivePrompt = messages.isEmpty ? prompt : messages.map(\.content).joined(separator: " ")
+        guard effectivePrompt.count <= Self.maxPromptLength else {
+            throw InferenceError.promptTooLong(
+                length: effectivePrompt.count,
+                maxLength: Self.maxPromptLength
+            )
+        }
+
         let container = try await modelManager.getModelContainer(id: modelID)
 
-        let maxTokens = parameters.maxTokens > 0 ? Int(parameters.maxTokens) : defaultMaxTokens
+        // Cap maxTokens at the hard ceiling.
+        let requestedTokens = parameters.maxTokens > 0 ? Int(parameters.maxTokens) : defaultMaxTokens
+        let maxTokens = min(requestedTokens, Self.maxTokensCap)
         let temperature = parameters.temperature > 0 ? parameters.temperature : defaultTemperature
 
         let generateParams = GenerateParameters(
@@ -78,6 +96,24 @@ public actor InferenceEngine {
         )
 
         for await item in stream {
+            // Check cancellation before processing each token so the loop exits
+            // promptly when the calling Task is cancelled (e.g. client disconnect
+            // or graceful daemon shutdown).  Flush whatever was generated so far
+            // as a complete response rather than dropping it silently.
+            if Task.isCancelled {
+                let genTime = Date().timeIntervalSince(startTime)
+                let partialComplete = MLXContainer_GenerateComplete(
+                    fullText: fullText,
+                    promptTokens: 0,
+                    completionTokens: chunkCount,
+                    promptTimeSeconds: 0,
+                    generationTimeSeconds: genTime,
+                    tokensPerSecond: genTime > 0 ? Double(chunkCount) / genTime : 0
+                )
+                try await onComplete(partialComplete)
+                return
+            }
+
             switch item {
             case .chunk(let text):
                 fullText += text
@@ -124,18 +160,45 @@ public actor InferenceEngine {
         logger.info("Embed: model=\(modelID), texts=\(texts.count)")
 
         let embeddings: [MLXContainer_Embedding] = try await container.perform { context in
-            // Walk the model's leaf modules to find the first Embedding layer (the token table).
+            // Preferred embedding layer names used by common model families.
+            let preferredNames: Set<String> = [
+                "embed_tokens",   // LLaMA, Mistral, Gemma
+                "wte",            // GPT-2 / GPT-NeoX
+                "word_embeddings", // BERT / RoBERTa
+                "token_embedding", // generic
+            ]
+
             var embeddingLayer: Embedding? = nil
-            for (_, module) in context.model.leafModules().flattened() {
-                if let layer = module as? Embedding {
+            var selectedName: String? = nil
+
+            let leafModules = context.model.leafModules().flattened()
+
+            // First pass: look for a layer with one of the preferred names.
+            for (name, module) in leafModules {
+                if preferredNames.contains(name), let layer = module as? Embedding {
                     embeddingLayer = layer
+                    selectedName = name
                     break
+                }
+            }
+
+            // Second pass: fall back to the first Embedding layer found.
+            if embeddingLayer == nil {
+                for (name, module) in leafModules {
+                    if let layer = module as? Embedding {
+                        embeddingLayer = layer
+                        selectedName = name
+                        break
+                    }
                 }
             }
 
             guard let embLayer = embeddingLayer else {
                 throw EmbedError.noEmbeddingLayer
             }
+
+            self.logger.info("Embed: using embedding layer '\(selectedName ?? "<unknown>")'")
+
 
             var results: [MLXContainer_Embedding] = []
             for text in texts {
@@ -168,6 +231,19 @@ public actor InferenceEngine {
 
         logger.info("Embed complete: \(embeddings.count) vectors produced for model \(modelID)")
         return embeddings
+    }
+}
+
+// MARK: - Inference errors
+
+enum InferenceError: Error, LocalizedError {
+    case promptTooLong(length: Int, maxLength: Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .promptTooLong(let length, let maxLength):
+            return "Prompt length \(length) characters exceeds the maximum of \(maxLength) characters"
+        }
     }
 }
 

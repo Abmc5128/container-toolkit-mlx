@@ -224,49 +224,6 @@ extension MLXContainerIntegration {
     }
 }
 
-// MARK: - GPUDaemonLifecycle extension (daemonPID)
-
-extension GPUDaemonLifecycle {
-    /// The OS process identifier of the running daemon, or `-1` if not running.
-    ///
-    /// Exposed so `GPUSetupResult` can surface the PID for logging and
-    /// health-check purposes without leaking `Process` internals.
-    public var daemonPID: Int32 {
-        // `isRunning` is the public API; we derive the PID from the internal
-        // Process through the computed property pattern already established
-        // in GPUDaemonLifecycle.  The actor is always called from async context.
-        isRunning ? _daemonPID : -1
-    }
-
-    // The actor stores `daemonProcess: Process?` privately; we surface just
-    // the PID without exposing the Process itself.  This property is an
-    // actor-isolated computed var — it's safe to access with `await`.
-    private var _daemonPID: Int32 {
-        // Access via the actor-isolated stored property through the nonisolated
-        // helper below.  The compiler enforces actor isolation; this pattern
-        // stays within the actor boundary because `daemonPID` is not nonisolated.
-        //
-        // Note: `Process.processIdentifier` returns 0 before launch and the
-        // real PID after.  -1 is our sentinel for "daemon not running".
-        //
-        // Implementation delegates to the actor's own stored state.  The
-        // GPUDaemonLifecycle actor exposes `isRunning` (Bool) but not the raw
-        // Process.  We extend it here to add PID exposure without changing the
-        // original actor definition (open/closed principle for the patch).
-        return isRunning ? _extractPID() : -1
-    }
-
-    // Nonisolated trampoline so the compiler does not reject the recursive
-    // actor-isolated access pattern above.
-    private nonisolated func _extractPID() -> Int32 {
-        // In the actual merged implementation, GPUDaemonLifecycle would expose
-        // `var daemonPID: Int32` directly from its stored `daemonProcess`.
-        // This placeholder returns 0 (valid "no PID yet" sentinel from Process)
-        // until the actor is updated to expose the property directly.
-        return 0
-    }
-}
-
 // MARK: - Errors
 
 /// Errors specific to the apple/container integration layer.
