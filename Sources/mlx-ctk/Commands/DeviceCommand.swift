@@ -32,7 +32,9 @@ struct DeviceCommand: AsyncParsableCommand {
                 let encoder = JSONEncoder()
                 encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
                 let data = try encoder.encode(devices)
-                print(String(data: data, encoding: .utf8)!)
+                if let output = String(data: data, encoding: .utf8) {
+                        print(output)
+                    }
             } else {
                 print("Apple GPU Devices")
                 print(String(repeating: "=", count: 50))

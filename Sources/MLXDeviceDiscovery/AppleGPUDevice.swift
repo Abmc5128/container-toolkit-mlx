@@ -56,7 +56,7 @@ public struct AppleGPUDevice: Sendable, Codable, CustomStringConvertible {
           Unified Memory:    \(String(format: "%.1f", memGB)) GB
           Working Set:       \(String(format: "%.1f", workingSetGB)) GB
           Metal 3:           \(supportsMetal3 ? "Yes" : "No")
-          Unified Memory:    \(hasUnifiedMemory ? "Yes" : "No")
+          UMA Architecture:  \(hasUnifiedMemory ? "Yes" : "No")
           Max Threads/Group: \(maxThreadsPerThreadgroup)
         """
     }

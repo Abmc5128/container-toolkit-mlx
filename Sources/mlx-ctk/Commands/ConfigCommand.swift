@@ -21,7 +21,9 @@ struct ConfigCommand: AsyncParsableCommand {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(config)
-            print(String(data: data, encoding: .utf8)!)
+            if let output = String(data: data, encoding: .utf8) {
+                print(output)
+            }
         }
     }
 

@@ -67,12 +67,20 @@ public actor GPUDaemonLifecycle {
         }
         process.arguments = arguments
 
-        // Redirect output to log files
+        // Redirect output to log files — create files if they don't exist yet.
         let logDir = config.resolvedModelsDirectory.deletingLastPathComponent().appendingPathComponent("logs")
         try FileManager.default.createDirectory(at: logDir, withIntermediateDirectories: true)
 
-        process.standardOutput = try FileHandle(forWritingTo: logDir.appendingPathComponent("daemon.log"))
-        process.standardError = try FileHandle(forWritingTo: logDir.appendingPathComponent("daemon-error.log"))
+        let stdoutLog = logDir.appendingPathComponent("daemon.log")
+        let stderrLog = logDir.appendingPathComponent("daemon-error.log")
+        for logFile in [stdoutLog, stderrLog] {
+            if !FileManager.default.fileExists(atPath: logFile.path) {
+                FileManager.default.createFile(atPath: logFile.path, contents: nil)
+            }
+        }
+
+        process.standardOutput = try FileHandle(forWritingTo: stdoutLog)
+        process.standardError = try FileHandle(forWritingTo: stderrLog)
 
         try process.run()
         daemonProcess = process
