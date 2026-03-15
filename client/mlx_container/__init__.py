@@ -15,6 +15,24 @@ Usage inside a Linux container:
     # Stream tokens
     for token in generate("Write a poem", model="mlx-community/Llama-3.2-1B-4bit", stream=True):
         print(token, end="", flush=True)
+
+Compatibility layers
+--------------------
+OpenAI SDK drop-in:
+
+    from mlx_container.compat.openai import ChatCompletion
+    response = ChatCompletion.create(model=..., messages=[...])
+    print(response.choices[0].message.content)
+
+Anthropic SDK drop-in:
+
+    from mlx_container.compat.anthropic import Messages
+    response = Messages.create(model=..., max_tokens=256, messages=[...])
+    print(response.content[0].text)
+
+    with Messages.stream(model=..., max_tokens=256, messages=[...]) as stream:
+        for text in stream.text_stream:
+            print(text, end="", flush=True)
 """
 
 from mlx_container.inference import generate, generate_stream
