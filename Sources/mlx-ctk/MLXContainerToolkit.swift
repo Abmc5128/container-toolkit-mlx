@@ -11,6 +11,10 @@ struct MLXContainerToolkit: AsyncParsableCommand {
             DeviceCommand.self,
             SetupCommand.self,
             ConfigCommand.self,
+            CDICommand.self,
+            RuntimeCommand.self,
+            ServiceCommand.self,
+            StatusCommand.self,
         ],
         defaultSubcommand: nil
     )

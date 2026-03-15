@@ -162,7 +162,18 @@ struct MLXContainerServiceImpl: MLXContainerServiceProtocol {
         request: MLXContainer_EmbedRequest,
         context: ServerContext
     ) async throws -> MLXContainer_EmbedResponse {
-        return MLXContainer_EmbedResponse(error: "Embeddings not yet implemented")
+        server.logger.info("Embed: model=\(request.modelID), texts=\(request.texts.count)")
+
+        do {
+            let embeddings = try await server.inferenceEngine.embed(
+                modelID: request.modelID,
+                texts: request.texts
+            )
+            return MLXContainer_EmbedResponse(embeddings: embeddings)
+        } catch {
+            server.logger.error("Embed failed: \(error)")
+            return MLXContainer_EmbedResponse(error: error.localizedDescription)
+        }
     }
 
     func getGPUStatus(

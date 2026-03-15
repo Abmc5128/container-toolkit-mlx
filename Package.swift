@@ -8,6 +8,7 @@ let package = Package(
     products: [
         .executable(name: "mlx-ctk", targets: ["mlx-ctk"]),
         .executable(name: "mlx-container-daemon", targets: ["MLXContainerDaemon"]),
+        .executable(name: "mlx-cdi-hook", targets: ["mlx-cdi-hook"]),
         .library(name: "MLXDeviceDiscovery", targets: ["MLXDeviceDiscovery"]),
         .library(name: "MLXContainerConfig", targets: ["MLXContainerConfig"]),
         .library(name: "MLXContainerProtocol", targets: ["MLXContainerProtocol"]),
@@ -65,6 +66,7 @@ let package = Package(
                 .product(name: "MLXRandom", package: "mlx-swift"),
                 .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
                 .product(name: "MLXLLM", package: "mlx-swift-lm"),
+                .product(name: "MLXEmbedders", package: "mlx-swift-lm"),
             ]
         ),
 
@@ -73,6 +75,19 @@ let package = Package(
             name: "mlx-ctk",
             dependencies: [
                 "MLXDeviceDiscovery",
+                "MLXContainerConfig",
+                "MLXContainerProtocol",
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                .product(name: "Logging", package: "swift-log"),
+                .product(name: "GRPCCore", package: "grpc-swift-2"),
+                .product(name: "GRPCNIOTransportHTTP2", package: "grpc-swift-nio-transport"),
+            ]
+        ),
+
+        // MARK: - CDI Hook
+        .executableTarget(
+            name: "mlx-cdi-hook",
+            dependencies: [
                 "MLXContainerConfig",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "Logging", package: "swift-log"),
